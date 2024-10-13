@@ -1,10 +1,12 @@
 import torch
+import torch.nn as nn
 from torchvision.utils import save_image
 import os
 
 # Параметры генерации
-latent_dim = 100  # размер латентного вектора (в зависимости от вашей модели)
+latent_dim = 1024  # размер латентного вектора
 num_images = 10  # количество изображений, которые нужно сгенерировать
+condition_dim = 3  # Размерность условных данных
 output_dir = './generated_images'  # директория для сохранения изображений
 os.makedirs(output_dir, exist_ok=True)
 
@@ -13,7 +15,7 @@ class Generator(torch.nn.Module):
     def __init__(self, latent_dim, condition_dim):
         super(Generator, self).__init__()
 
-        self.init_size = 4  # Начальный размер изображения 4x4
+        self.init_size = 4
         self.l1 = nn.Sequential(
             nn.Linear(latent_dim + condition_dim, 1024 * self.init_size * self.init_size)
         )
@@ -51,36 +53,32 @@ class Generator(torch.nn.Module):
 
             # 256x256 -> 512x512
             nn.ConvTranspose2d(16, 3, 4, 2, 1),
-            nn.Tanh()  # Для нормализации значений пикселей в диапазоне от -1 до 1
+            nn.Tanh()
         )
 
     def forward(self, z, condition):
-        # Конкатенируем латентный вектор и условие
         x = torch.cat([z, condition], dim=1)
 
-        # Преобразуем через полносвязный слой в начальный тензор
         out = self.l1(x)
-        out = out.view(out.size(0), 1024, self.init_size, self.init_size)  # Превращаем в тензор 4x4
+        out = out.view(out.size(0), 1024, self.init_size, self.init_size)
 
-        # Пропускаем через транспонированные свёртки для увеличения разрешения
         img = self.conv_blocks(out)
         return img
 
 # Инициализация модели генератора
-generator = Generator()
+generator = Generator(latent_dim, condition_dim)
 
 # Загрузка сохранённого веса модели
 generator.load_state_dict(torch.load('generator.pth'))
-generator.eval()  # Перевод в режим генерации (оценки)
+generator.eval()
 
 # Генерация изображений
 def generate_images(num_images):
-    # Генерация случайного шума (латентный вектор) для входа в генератор
     noise = torch.randn(num_images, latent_dim)
+    condition = torch.randn(num_images, condition_dim)
 
-    # Прогон через генератор
-    with torch.no_grad():  # Отключаем вычисление градиентов для генерации
-        generated_images = generator(noise)
+    with torch.no_grad():
+        generated_images = generator(noise, condition)
 
     return generated_images
 
